@@ -1,1 +1,308 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hardened Tracker</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#4CAF50"><style>body{font-family:Arial;margin:16px}textarea,input,button{width:100%;padding:10px;margin-top:6px}textarea{min-height:110px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}@media(max-width:560px){.row{grid-template-columns:1fr}}#status{margin-top:8px;font-size:12px;color:#455a64}#status[data-type=ok]{color:#2e7d32}#status[data-type=warn]{color:#e65100}.banner{position:fixed;left:0;right:0;bottom:0;background:#263238;color:#fff;padding:10px 16px;display:none}.banner.show{display:block}.banner button{background:#4CAF50;color:#fff;border:none;padding:8px 12px}</style></head><body><h1>Workout & Meal Tracker</h1><div class="section"><label for="workout">Workout Notes</label><textarea id="workout"></textarea></div><div class="section"><label for="meal">Meal Notes</label><textarea id="meal"></textarea></div><div class="section"><label for="progress">Progress Notes</label><textarea id="progress"></textarea></div><div class="row"><button id="saveBtn" type="button">Save (Offline)</button><button id="clearBtn" type="button">Clear</button></div><div class="row"><button id="exportBtn" type="button">Export JSON</button><label style="display:block"><input type="file" id="importFile" accept="application/json"/> Import JSON</label></div><div id="status" role="status" aria-live="polite"></div><div id="updateBanner" class="banner">Update available. <button id="reloadBtn">Reload</button></div><script>function storageAvailable(t="localStorage"){try{var e=window[t],a="__test__";return e.setItem(a,a),e.removeItem(a),!0}catch(t){return!1}}const safeStore={available:storageAvailable("localStorage"),get:function(t,e=""){if(!this.available)return e;try{return localStorage.getItem(t)??e}catch(t){return console.warn("get failed",t),e}},set:function(t,e){if(!this.available)return!1;try{return localStorage.setItem(t,e),!0}catch(t){return t&&("QuotaExceededError"===t.name||22===t.code)?alert("Local storage is full. Please export and clear some data."):console.warn("set failed",t),!1}},remove:function(t){if(this.available)try{localStorage.removeItem(t)}catch(t){console.warn("remove failed",t)}}};function debounce(t,e=500){let a;return(...n)=>{clearTimeout(a),a=setTimeout(()=>t.apply(null,n),e)}}function setStatus(t,e="info"){const a=document.getElementById("status");a.textContent=t,a.dataset.type=e}function loadData(){document.getElementById("workout").value=safeStore.get("workout",""),document.getElementById("meal").value=safeStore.get("meal",""),document.getElementById("progress").value=safeStore.get("progress",""),setStatus(safeStore.get("lastUpdated","")?"Last update: "+new Date(safeStore.get("lastUpdated","")).toLocaleString():"Ready")}const doSave=debounce(()=>{const t={workout:document.getElementById("workout").value,meal:document.getElementById("meal").value,progress:document.getElementById("progress").value,lastUpdated:new Date().toISOString()};let e=!0;for(const[a,n]of Object.entries(t))safeStore.set(a,n)||(e=!1);setStatus(e?"Saved "+new Date().toLocaleTimeString():"Save failed",e?"ok":"warn")},500);function saveDataManual(){doSave()}function clearData(){confirm("Clear all local data?")&&(["workout","meal","progress","lastUpdated"].forEach((t=>safeStore.remove(t))),loadData(),setStatus("Cleared","warn"))}const MAX_IMPORT_BYTES=1048576;function exportData(){const t={workout:safeStore.get("workout",""),meal:safeStore.get("meal",""),progress:safeStore.get("progress",""),lastUpdated:safeStore.get("lastUpdated",new Date().toISOString()),version:2},e=new Blob([JSON.stringify(t,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(e);const n=new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");a.download=`fitness-tracker-backup-${n}.json`,document.body.appendChild(a),a.click(),a.remove()}function importData(t){if(!t)return alert("Select a JSON file."),void 0;if(t.size>MAX_IMPORT_BYTES)return alert("File too large (1MB limit)."),void 0;const e=new FileReader;e.onerror=()=>alert("Read error"),e.onload=a=>{try{const n=JSON.parse(a.target.result);if("object"!=typeof n||null===n)throw new Error("Invalid JSON");if("workout"in n&&"string"!=typeof n.workout)throw new Error("workout must be string");if("meal"in n&&"string"!=typeof n.meal)throw new Error("meal must be string");if("progress"in n&&"string"!=typeof n.progress)throw new Error("progress must be string");if("lastUpdated"in n&&isNaN(Date.parse(n.lastUpdated)))throw new Error("invalid lastUpdated");safeStore.set("workout",null!=n.workout?n.workout:""),safeStore.set("meal",null!=n.meal?n.meal:""),safeStore.set("progress",null!=n.progress?n.progress:""),safeStore.set("lastUpdated",n.lastUpdated||new Date().toISOString()),loadData(),setStatus("Imported","ok")}catch(t){alert("Import error: "+t.message)}} ,e.readAsText(t,"utf-8")}window.addEventListener("load",(()=>{loadData(),document.getElementById("saveBtn").addEventListener("click",saveDataManual),document.getElementById("clearBtn").addEventListener("click",clearData),document.getElementById("exportBtn").addEventListener("click",exportData),document.getElementById("importFile").addEventListener("change",(t=>importData(t.target.files&&t.target.files[0]))),["workout","meal","progress"].forEach((t=>document.getElementById(t).addEventListener("input",doSave))),window.addEventListener("online",(()=>setStatus("Online","ok"))),window.addEventListener("offline",(()=>setStatus("Offline — working with last saved data","warn"))),"serviceWorker"in navigator&&navigator.serviceWorker.register("service-worker.js").then((t=>{t.waiting&&showUpdateBanner(t.waiting),t.addEventListener("updatefound",(()=>{const e=t.installing;e&&e.addEventListener("statechange",(()=>{"installed"===e.state&&navigator.serviceWorker.controller&&showUpdateBanner(e)}))})),navigator.serviceWorker.addEventListener("controllerchange",(()=>window.location.reload()))})).catch((t=>console.warn("SW register fail",t)))}));function showUpdateBanner(t){const e=document.getElementById("updateBanner");e.classList.add("show"),document.getElementById("reloadBtn").onclick=(()=>{t.postMessage({type:"SKIP_WAITING"})})}</script></body></html>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fitness Tracker — Structured</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#4CAF50" />
+  <style>
+    :root{--green:#2e7d32;--blue:#1565c0;--gray:#455a64;--orange:#ef6c00}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px}
+    h1{margin:8px 0 16px;text-align:center}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+    select,button{padding:10px;border-radius:8px;border:1px solid #ccc}
+    .exercise{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px}
+    .exercise h3{margin:0 0 8px}
+    .target{color:var(--gray);font-size:13px}
+    .sets{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .set{border:1px solid #ddd;border-radius:8px;padding:6px}
+    .set input[type=number]{width:64px}
+    .row{display:flex;gap:8px;align-items:center}
+    .badge{display:inline-block;background:#e8f5e9;color:var(--green);padding:2px 6px;border-radius:6px;font-size:12px;margin-left:6px}
+    .done{background:#e8f5e9}
+    .skipped{background:#fff3e0}
+    .footer{position:sticky;bottom:0;background:#fff;padding:10px 0;margin-top:12px;border-top:1px solid #eee}
+    .footer button{width:100%;padding:12px;font-weight:600;color:#fff;background:var(--green);border:none;border-radius:8px}
+    #status{margin-top:8px;color:var(--gray);font-size:12px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    @media(max-width:600px){.toolbar{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+    .pill{border:1px solid #ccc;border-radius:999px;padding:4px 10px;margin-right:6px;font-size:12px}
+  </style>
+</head>
+<body>
+  <h1>Workout & Meal Tracker</h1>
+
+  <div class="toolbar">
+    <div class="row">
+      <label for="week">Hafta:&nbsp;</label>
+      <select id="week"></select>
+    </div>
+    <div class="row">
+      <label for="day">Gün:&nbsp;</label>
+      <select id="day">
+        <option value="1">Gün 1</option>
+        <option value="2">Gün 2</option>
+        <option value="3">Gün 3</option>
+        <option value="4">Gün 4</option>
+      </select>
+    </div>
+    <div class="row" style="justify-content:flex-end;gap:6px">
+      <button id="loadTemplate">24 Haftalık Program</button>
+      <button id="exportBtn">Dışa Aktar</button>
+      <label class="pill">İçe Aktar <input type="file" id="importFile" accept="application/json" style="display:none"></label>
+    </div>
+  </div>
+
+  <div id="workout"></div>
+
+  <div class="footer">
+    <div class="grid2">
+      <button id="saveBtn">Kaydet</button>
+      <button id="completeBtn" style="background:var(--blue)">Antrenmanı Tamamla</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+<script>
+// ---------- IndexedDB minimal wrapper ----------
+const DB_NAME = 'trackerDB';
+const DB_VERSION = 1;
+const STORE_LOGS = 'logs';
+const STORE_PLAN = 'plan';
+
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(STORE_LOGS)) db.createObjectStore(STORE_LOGS, { keyPath:'id' });
+      if(!db.objectStoreNames.contains(STORE_PLAN)) db.createObjectStore(STORE_PLAN, { keyPath:'id' });
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+async function dbPut(store, value){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value);
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+async function dbGet(store, id){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(id);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+// ---------- Plan generator (24 weeks) ----------
+function getPhase(week){
+  if(week<=8) return 1; if(week<=16) return 2; return 3;
+}
+function planFor(week, day){
+  const phase = getPhase(week);
+  if(phase===1){
+    if(day===1) return [
+      {name:'Negatif Barfiks', type:'reps', sets:5, reps:5},
+      {name:'Australian Pull-Up', type:'reps', sets:4, reps:10},
+      {name:'Dead Hang', type:'time', sets:3, seconds:30},
+      {name:'Hollow Hold', type:'time', sets:3, seconds:20}
+    ];
+    if(day===2) return [
+      {name:'Eğik Şınav', type:'reps', sets:4, reps:12},
+      {name:'Pike Şınav', type:'reps', sets:4, reps:8},
+      {name:'Duvar Amut Bekleme', type:'time', sets:4, seconds:20},
+      {name:'Plank', type:'time', sets:3, seconds:30}
+    ];
+    if(day===3) return [
+      {name:'Destekli Pistol Squat', type:'reps', sets:4, reps:8, per:'bacak'},
+      {name:'Bulgar Split Squat', type:'reps', sets:3, reps:10},
+      {name:'Glute Bridge', type:'reps', sets:3, reps:12},
+      {name:'Calf Raise', type:'reps', sets:3, reps:15}
+    ];
+    if(day===4) return [
+      {name:'Asılı Diz Kaldırma', type:'reps', sets:4, reps:8},
+      {name:'Yan Plank', type:'time', sets:3, seconds:20},
+      {name:'Squat Bekleme', type:'time', sets:3, seconds:30}
+    ];
+  }
+  if(phase===2){
+    if(day===1) return [
+      {name:'Patlayıcı Barfiks', type:'reps', sets:4, reps:6},
+      {name:'L-Sit Barfiks', type:'reps', sets:4, reps:6},
+      {name:'Bant Destekli Muscle-Up', type:'reps', sets:3, reps:5}
+    ];
+    if(day===2) return [
+      {name:'Pike Şınav', type:'reps', sets:5, reps:8},
+      {name:'Dips', type:'reps', sets:4, reps:10},
+      {name:'Duvar Amut Şınavı', type:'reps', sets:4, reps:5}
+    ];
+    if(day===3) return [
+      {name:'Pistol Squat İlerleme', type:'reps', sets:4, reps:6, per:'bacak'},
+      {name:'Bulgar Split Squat', type:'reps', sets:3, reps:10},
+      {name:'Nordic Curl', type:'reps', sets:3, reps:6},
+      {name:'Dragon Flag', type:'reps', sets:3, reps:6}
+    ];
+    if(day===4) return [
+      {name:'Asılı Bacak Kaldırma', type:'reps', sets:4, reps:10},
+      {name:'Zıplama Squat', type:'reps', sets:4, reps:12},
+      {name:'Burpee', type:'reps', sets:4, reps:10}
+    ];
+  }
+  // phase 3
+  if(day===1) return [
+    {name:'Muscle-Up', type:'reps', sets:5, reps:5},
+    {name:'L-Sit Barfiks', type:'reps', sets:4, reps:8}
+  ];
+  if(day===2) return [
+    {name:'Amut Şınav Progression', type:'reps', sets:5, reps:6},
+    {name:'Archer Şınav', type:'reps', sets:3, reps:8}
+  ];
+  if(day===3) return [
+    {name:'Pistol Squat', type:'reps', sets:4, reps:10, per:'bacak'},
+    {name:'Nordic Curl', type:'reps', sets:3, reps:8}
+  ];
+  if(day===4) return [
+    {name:'Muscle-Up + Dips (superset)', type:'reps', sets:4, reps:5},
+    {name:'Amut Şınav Negatif', type:'reps', sets:4, reps:5}
+  ];
+}
+
+function buildWorkout(week, day){
+  return planFor(week, day).map(ex=>({
+    name: ex.name,
+    type: ex.type,
+    targetSets: ex.sets,
+    targetReps: ex.reps||null,
+    targetSeconds: ex.seconds||null,
+    per: ex.per||null,
+    sets: Array.from({length: ex.sets}, (_,i)=>({
+      index:i+1, done:false, actual: ex.reps||ex.seconds||0
+    }))
+  }));
+}
+
+// ---------- UI Rendering ----------
+const weekSel = document.getElementById('week');
+for(let w=1; w<=24; w++){ const opt=document.createElement('option'); opt.value=w; opt.textContent='Hafta '+w; weekSel.appendChild(opt);} 
+weekSel.value = 1;
+const daySel = document.getElementById('day');
+
+async function render(){
+  const week = parseInt(weekSel.value); const day = parseInt(daySel.value);
+  const id = `w${week}-d${day}`;
+  let log = await dbGet(STORE_LOGS, id);
+  if(!log){ log = { id, week, day, exercises: buildWorkout(week, day), updatedAt: new Date().toISOString() }; await dbPut(STORE_LOGS, log); }
+  const cont = document.getElementById('workout'); cont.innerHTML='';
+  log.exercises.forEach((ex,ei)=>{
+    const div = document.createElement('div'); div.className='exercise';
+    const title = document.createElement('h3'); title.textContent = ex.name; div.appendChild(title);
+    const info = document.createElement('div'); info.className='target';
+    info.textContent = 'Hedef: '+ ex.targetSets + ' set x ' + (ex.type==='reps' ? (ex.targetReps+' tekrar') : (ex.targetSeconds+' sn')) + (ex.per?(' / '+ex.per):'');
+    div.appendChild(info);
+    const setsDiv = document.createElement('div'); setsDiv.className='sets';
+    ex.sets.forEach((s, si)=>{
+      const sDiv = document.createElement('div'); sDiv.className='set';
+      const row = document.createElement('div'); row.className='row';
+      const label = document.createElement('span'); label.textContent = 'Set '+s.index; row.appendChild(label);
+      const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=s.done; chk.addEventListener('change', ()=>{ s.done = chk.checked; saveDraft(); }); row.appendChild(chk);
+      const inp = document.createElement('input'); inp.type='number'; inp.min=0; inp.value=s.actual; inp.addEventListener('change', ()=>{ s.actual = parseInt(inp.value||'0'); saveDraft(); }); row.appendChild(inp);
+      const unit = document.createElement('span'); unit.textContent = ex.type==='reps' ? 'tekrar' : 'sn'; row.appendChild(unit);
+      sDiv.appendChild(row);
+      setsDiv.appendChild(sDiv);
+    });
+    // Quick actions
+    const qa = document.createElement('div'); qa.style.marginTop='6px';
+    const doneBtn = document.createElement('button'); doneBtn.textContent='Tamamlandı'; doneBtn.onclick=()=>{ ex.sets.forEach(x=>{x.done=true;}); saveDraft(); render(); }; qa.appendChild(doneBtn);
+    const skipBtn = document.createElement('button'); skipBtn.textContent='Atla'; skipBtn.style.marginLeft='6px'; skipBtn.onclick=()=>{ ex.sets.forEach(x=>{x.done=false;x.actual=0;}); saveDraft(); render(); }; qa.appendChild(skipBtn);
+    div.appendChild(setsDiv); div.appendChild(qa);
+    cont.appendChild(div);
+  });
+  document.getElementById('status').textContent = `Hafta ${week}, Gün ${day} — Kayıtlar hazır.`;
+}
+
+async function saveDraft(){
+  const week = parseInt(weekSel.value); const day = parseInt(daySel.value);
+  const id = `w${week}-d${day}`;
+  const cont = document.getElementById('workout');
+  // read current state back (already mutated in memory)
+  // fetch current log
+  const log = await dbGet(STORE_LOGS, id);
+  if(log){ log.updatedAt=new Date().toISOString(); await dbPut(STORE_LOGS, log); document.getElementById('status').textContent='Taslak kaydedildi.'; }
+}
+
+async function saveComplete(){
+  const week = parseInt(weekSel.value); const day = parseInt(daySel.value);
+  const id = `w${week}-d${day}`; const log = await dbGet(STORE_LOGS, id);
+  if(!log) return;
+  // compute stats
+  let setsTotal=0, setsDone=0, volume=0;
+  log.exercises.forEach(ex=>{
+    ex.sets.forEach(s=>{ setsTotal++; if(s.done) setsDone++; if(ex.type==='reps') volume+=s.actual; });
+  });
+  log.completed=true; log.completedAt=new Date().toISOString(); log.stats={setsTotal, setsDone, completion: Math.round(setsDone/setsTotal*100), volume};
+  await dbPut(STORE_LOGS, log);
+  document.getElementById('status').textContent=`Tamamlandı. Tamamlama: ${log.stats.completion}% | Toplam tekrar: ${log.stats.volume}`;
+  // auto-advance day
+  if(day<4){ daySel.value=day+1; } else { if(week<24){ weekSel.value=week+1; daySel.value=1; } }
+  render();
+}
+
+// Export / Import
+async function exportAll(){
+  const db = await openDB();
+  const tx = db.transaction([STORE_LOGS, STORE_PLAN], 'readonly');
+  const logsReq = tx.objectStore(STORE_LOGS).getAll();
+  const planReq = tx.objectStore(STORE_PLAN).getAll();
+  const [logs, plan] = await Promise.all([
+    new Promise(r=>{logsReq.onsuccess=()=>r(logsReq.result||[])}),
+    new Promise(r=>{planReq.onsuccess=()=>r(planReq.result||[])}),
+  ]);
+  const payload = { version:2, exportedAt:new Date().toISOString(), logs, plan };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tracker-backup.json'; a.click(); a.remove();
+}
+
+function importAll(file){
+  if(!file) return;
+  const reader = new FileReader(); reader.onload = async (e)=>{
+    try{
+      const obj = JSON.parse(e.target.result);
+      if(!obj || typeof obj!=='object') throw new Error('Geçersiz dosya');
+      if(obj.logs){ for(const l of obj.logs){ await dbPut(STORE_LOGS, l); } }
+      if(obj.plan){ for(const p of obj.plan){ await dbPut(STORE_PLAN, p); } }
+      document.getElementById('status').textContent='Yedek içe aktarıldı.'; render();
+    }catch(err){ alert('İçe aktarma hatası: '+err.message); }
+  }; reader.readAsText(file,'utf-8');
+}
+
+// Template loader: store a simple marker
+async function loadTemplate(){
+  await dbPut(STORE_PLAN, {id:'planMeta', version:'24wk-v1', loadedAt:new Date().toISOString()});
+  document.getElementById('status').textContent='24 Haftalık plan şablonu yüklendi (dinamik).';
+}
+
+// Bindings
+weekSel.addEventListener('change', render);
+daySel.addEventListener('change', render);
+document.getElementById('saveBtn').addEventListener('click', saveDraft);
+document.getElementById('completeBtn').addEventListener('click', saveComplete);
+document.getElementById('exportBtn').addEventListener('click', exportAll);
+document.getElementById('importFile').addEventListener('change', (e)=> importAll(e.target.files[0]));
+document.getElementById('loadTemplate').addEventListener('click', loadTemplate);
+
+// SW register
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('service-worker.js'); }
+
+render();
+</script>
+</body>
+</html>
