@@ -2,45 +2,280 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Fitness Tracker — ULTRA (Hotfix 1)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fitness Tracker — Egzersiz Bazlı Ayar + PR Analitiği</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#4CAF50" />
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-  <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px}</style>
+  <style>
+    :root{--green:#2e7d32;--blue:#1565c0;--gray:#455a64;--orange:#ef6c00;--bg:#fafafa}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px;background:var(--bg)}
+    h1{margin:8px 0 16px;text-align:center}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+    select,button{padding:10px;border-radius:8px;border:1px solid #ccc;background:#fff}
+    .exercise{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff}
+    .exercise h3{margin:0 0 8px}
+    .target{color:var(--gray);font-size:13px}
+    .sets{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .set{border:1px solid #ddd;border-radius:8px;padding:6px}
+    .set input[type=number]{width:64px}
+    .row{display:flex;gap:8px;align-items:center}
+    .footer{position:sticky;bottom:0;background:#fff;padding:10px 0;margin-top:12px;border-top:1px solid #eee}
+    .footer .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .footer button{width:100%;padding:12px;font-weight:600;color:#fff;border:none;border-radius:8px}
+    #saveBtn{background:var(--green)}
+    #completeBtn{background:var(--blue)}
+    #recalcBtn{background:var(--orange)}
+    #status{margin-top:8px;color:var(--gray);font-size:12px}
+    @media(max-width:900px){.toolbar{grid-template-columns:1fr 1fr 1fr}.footer .grid3{grid-template-columns:1fr}}
+    @media(max-width:600px){.toolbar{grid-template-columns:1fr 1fr}.footer .grid3{grid-template-columns:1fr}}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px}
+    .modal.show{display:flex}
+    .card{background:#fff;max-width:880px;width:100%;border-radius:12px;padding:16px;border:1px solid #e0e0e0}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .card h2{margin-top:0}
+    .card label{font-size:13px;color:#333}
+    .card input, .card textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
+    .closebar{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+    .pill{border:1px solid #ccc;border-radius:999px;padding:6px 10px;display:inline-block;background:#f7f7f7}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border:1px solid #eee;padding:6px;text-align:left;font-size:13px}
+  </style>
 </head>
 <body>
   <h1>Workout & Meal Tracker</h1>
-  <label>Hafta: <select id="week"></select></label>
-  <label>Gün: <select id="day"><option value="1">Gün 1</option><option value="2">Gün 2</option><option value="3">Gün 3</option><option value="4">Gün 4</option></select></label>
+  <div class="toolbar">
+    <div class="row">
+      <label for="week">Hafta:&nbsp;</label>
+      <select id="week"></select>
+    </div>
+    <div class="row">
+      <label for="day">Gün:&nbsp;</label>
+      <select id="day">
+        <option value="1">Gün 1</option>
+        <option value="2">Gün 2</option>
+        <option value="3">Gün 3</option>
+        <option value="4">Gün 4</option>
+      </select>
+    </div>
+    <button id="summaryBtn">Haftalık Özet</button>
+    <div class="row" style="gap:6px;justify-content:flex-end">
+      <button id="prBtn">PR Analitiği</button>
+      <button id="settingsBtn">Ayarlar</button>
+      <button id="exportBtn">Dışa Aktar</button>
+      <label class="pill">İçe Aktar <input type="file" id="importFile" accept="application/json" style="display:none"></label>
+    </div>
+  </div>
+
   <div id="workout"></div>
-  <script>
-    // --- minimal core to repro fix ---
-    const DB_NAME='trackerDB';const DB_VERSION=7;const STORE_LOGS='logs';const STORE_PLAN='plan';
-    function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE_LOGS))db.createObjectStore(STORE_LOGS,{keyPath:'id'});if(!db.objectStoreNames.contains(STORE_PLAN))db.createObjectStore(STORE_PLAN,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
-    async function dbPut(s,v){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(s,'readwrite');tx.objectStore(s).put(v);tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error);});}
-    async function dbGet(s,id){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(s,'readonly');const q=tx.objectStore(s).get(id);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
 
-    function basePlan(week,day){return[{name:'Test Egzersizi',type:'reps',sets:3,reps:5}]}
-    function inflate(plan){return plan.map(ex=>({name:ex.name,type:ex.type,targetSets:ex.sets,targetReps:ex.reps||null,targetSeconds:ex.seconds||null,sets:Array.from({length:ex.sets},(_,i)=>({index:i+1,done:false,actual:(ex.reps||ex.seconds||0)}))}))}
+  <div class="footer">
+    <div class="grid3">
+      <button id="saveBtn">Kaydet</button>
+      <button id="completeBtn">Antrenmanı Tamamla</button>
+      <button id="recalcBtn">Bir Sonraki Haftayı Hesapla</button>
+    </div>
+    <div id="status"></div>
+  </div>
 
-    const weekSel=document.getElementById('week');
-    for(let w=1; w<=24; w++){ const opt=document.createElement('option'); opt.value=w; opt.textContent='Hafta '+w; weekSel.appendChild(opt);} 
-    weekSel.value=1; const daySel=document.getElementById('day');
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal" aria-hidden="true">
+    <div class="card">
+      <div class="closebar"><h2>Progresyon Ayarları</h2><button id="closeSettings">Kapat</button></div>
+      <div class="grid2">
+        <div>
+          <h3>Genel (Varsayılan)</h3>
+          <label>Başarı eşiği (%): <input id="repSuccess" type="number" min="50" max="100" step="1"></label>
+          <label>Başarısız eşiği (%): <input id="repFail" type="number" min="0" max="90" step="1"></label>
+          <label>Artış/Azalış (tekrar): <input id="repInc" type="number" min="1" max="5"> <input id="repDec" type="number" min="1" max="5"></label>
+          <label>Min/Max Tekrar: <input id="repMin" type="number" min="1" style="width:48%"> <input id="repMax" type="number" min="1" style="width:48%"></label>
+          <label>Min/Max Set: <input id="setMin" type="number" min="1" style="width:48%"> <input id="setMax" type="number" min="1" style="width:48%"></label>
+          <h3>Süre Bazlı</h3>
+          <label>Başarı artışı (%): <input id="timeUpPct" type="number" min="5" max="50"></label>
+          <label>Başarısız azalış (%): <input id="timeDownPct" type="number" min="5" max="50"></label>
+          <label>Minimum saniye: <input id="timeMin" type="number" min="5"></label>
+        </div>
+        <div>
+          <h3>Egzersiz Bazlı Geçersiz Kılmalar (JSON)</h3>
+          <p class="pill">Örnek: {"Negatif Barfiks": {"repInc":2, "repMax":25}, "Pike Şınav": {"repInc":2, "setMax":7}}</p>
+          <textarea id="exOverrides" rows="14" placeholder='{"Negatif Barfiks":{"repInc":2}}'></textarea>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="resetDefaults">Varsayılanlara Dön</button>
+        <button id="saveSettings" style="background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:10px 14px">Kaydet</button>
+      </div>
+    </div>
+  </div>
 
-    async function getPlanFor(week,day){ const override=await dbGet(STORE_PLAN,`w${week}-d${day}`); if(override&&override.plan) return inflate(override.plan); return inflate(basePlan(week,day)); }
+  <!-- Weekly Summary Modal -->
+  <div id="summaryModal" class="modal" aria-hidden="true">
+    <div class="card">
+      <div class="closebar"><h2>Haftalık Özet</h2><button id="closeSummary">Kapat</button></div>
+      <div id="summaryMeta" class="pill"></div>
+      <canvas id="summaryChart" width="680" height="240"></canvas>
+      <div id="summaryText" style="margin-top:10px;color:#333;font-size:14px"></div>
+    </div>
+  </div>
 
-    let currentLog=null;
-    async function render(){ const week=parseInt(weekSel.value), day=parseInt(daySel.value); const id=`w${week}-d${day}`; let log=await dbGet(STORE_LOGS,id); if(!log){ const plan=await getPlanFor(week,day); log={id,week,day,exercises:plan,updatedAt:new Date().toISOString()}; await dbPut(STORE_LOGS,log);} currentLog=log; const cont=document.getElementById('workout'); cont.innerHTML=''; cont.textContent=`Render OK → Hafta ${week}, Gün ${day}`; }
+  <!-- PR Modal -->
+  <div id="prModal" class="modal" aria-hidden="true">
+    <div class="card">
+      <div class="closebar"><h2>Kişisel Rekorlar (PR)</h2><button id="closePR">Kapat</button></div>
+      <div id="prMeta" class="pill"></div>
+      <table id="prTable"><thead><tr><th>Egzersiz</th><th>Tür</th><th>En İyi Değer</th><th>Tarih</th><th>Hafta/Gün</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
 
-    // ✅ FIX: redeclare etmiyoruz; sadece listener ekliyoruz
-    weekSel.addEventListener('change', render);
-    daySel.addEventListener('change', render);
+<script>
+/***************** Settings (localStorage) *****************/
+const DEFAULTS = {
+  repSuccess: 90, repFail: 60, repInc: 1, repDec: 1, repMin: 3, repMax: 20, setMin: 3, setMax: 6,
+  timeUpPct: 10, timeDownPct: 10, timeMin: 10,
+  exOverrides: {}
+};
+function getCfg(){ try{ const raw = localStorage.getItem('cfg'); if(!raw) return {...DEFAULTS}; const o = JSON.parse(raw); if(!o.exOverrides) o.exOverrides = {}; return {...DEFAULTS, ...o, exOverrides:{...DEFAULTS.exOverrides, ...o.exOverrides}}; } catch(e){ return {...DEFAULTS}; } }
+function setCfg(o){ localStorage.setItem('cfg', JSON.stringify(o)); }
 
-    render();
-  </script>
+/*********************** IndexedDB ***********************/
+const DB_NAME = 'trackerDB';
+const DB_VERSION = 4;
+const STORE_LOGS = 'logs';
+const STORE_PLAN = 'plan';
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME, DB_VERSION); r.onupgradeneeded=e=>{const db=e.target.result; if(!db.objectStoreNames.contains(STORE_LOGS)) db.createObjectStore(STORE_LOGS,{keyPath:'id'}); if(!db.objectStoreNames.contains(STORE_PLAN)) db.createObjectStore(STORE_PLAN,{keyPath:'id'});}; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function dbPut(store, value){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(value); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); }); }
+async function dbGet(store, id){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const q=tx.objectStore(store).get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function dbAll(store){ const db=await openDB(); return new Promise((res)=>{ const tx=db.transaction(store,'readonly'); const q=tx.objectStore(store).getAll(); q.onsuccess=()=>res(q.result||[]); }); }
+
+/*********************** Base Plan & Helpers ***********************/
+function getPhase(week){ if(week<=8) return 1; if(week<=16) return 2; return 3; }
+function basePlan(week, day){
+  const p=getPhase(week);
+  if(p===1){
+    if(day===1) return [
+      {name:'Negatif Barfiks', type:'reps', sets:5, reps:5},
+      {name:'Australian Pull-Up', type:'reps', sets:4, reps:10},
+      {name:'Dead Hang', type:'time', sets:3, seconds:30},
+      {name:'Hollow Hold', type:'time', sets:3, seconds:20}
+    ];
+    if(day===2) return [
+      {name:'Eğik Şınav', type:'reps', sets:4, reps:12},
+      {name:'Pike Şınav', type:'reps', sets:4, reps:8},
+      {name:'Duvar Amut Bekleme', type:'time', sets:4, seconds:20},
+      {name:'Plank', type:'time', sets:3, seconds:30}
+    ];
+    if(day===3) return [
+      {name:'Destekli Pistol Squat', type:'reps', sets:4, reps:8},
+      {name:'Bulgar Split Squat', type:'reps', sets:3, reps:10},
+      {name:'Glute Bridge', type:'reps', sets:3, reps:12},
+      {name:'Calf Raise', type:'reps', sets:3, reps:15}
+    ];
+    if(day===4) return [
+      {name:'Asılı Diz Kaldırma', type:'reps', sets:4, reps:8},
+      {name:'Yan Plank', type:'time', sets:3, seconds:20},
+      {name:'Squat Bekleme', type:'time', sets:3, seconds:30}
+    ];
+  }
+  if(p===2){
+    if(day===1) return [
+      {name:'Patlayıcı Barfiks', type:'reps', sets:4, reps:6},
+      {name:'L-Sit Barfiks', type:'reps', sets:4, reps:6},
+      {name:'Bant Destekli Muscle-Up', type:'reps', sets:3, reps:5}
+    ];
+    if(day===2) return [
+      {name:'Pike Şınav', type:'reps', sets:5, reps:8},
+      {name:'Dips', type:'reps', sets:4, reps:10},
+      {name:'Duvar Amut Şınavı', type:'reps', sets:4, reps:5}
+    ];
+    if(day===3) return [
+      {name:'Pistol Squat İlerleme', type:'reps', sets:4, reps:6},
+      {name:'Bulgar Split Squat', type:'reps', sets:3, reps:10},
+      {name:'Nordic Curl', type:'reps', sets:3, reps:6},
+      {name:'Dragon Flag', type:'reps', sets:3, reps:6}
+    ];
+    if(day===4) return [
+      {name:'Asılı Bacak Kaldırma', type:'reps', sets:4, reps:10},
+      {name:'Zıplama Squat', type:'reps', sets:4, reps:12},
+      {name:'Burpee', type:'reps', sets:4, reps:10}
+    ];
+  }
+  if(day===1) return [
+    {name:'Muscle-Up', type:'reps', sets:5, reps:5},
+    {name:'L-Sit Barfiks', type:'reps', sets:4, reps:8}
+  ];
+  if(day===2) return [
+    {name:'Amut Şınav Progression', type:'reps', sets:5, reps:6},
+    {name:'Archer Şınav', type:'reps', sets:3, reps:8}
+  ];
+  if(day===3) return [
+    {name:'Pistol Squat', type:'reps', sets:4, reps:10},
+    {name:'Nordic Curl', type:'reps', sets:3, reps:8}
+  ];
+  if(day===4) return [
+    {name:'Muscle-Up + Dips (superset)', type:'reps', sets:4, reps:5},
+    {name:'Amut Şınav Negatif', type:'reps', sets:4, reps:5}
+  ];
+}
+function inflate(plan){ return plan.map(ex=>({name:ex.name,type:ex.type,per:ex.per||null,targetSets:ex.sets,targetReps:ex.reps||null,targetSeconds:ex.seconds||null,sets:Array.from({length:ex.sets},(_,i)=>({index:i+1,done:false,actual:(ex.reps||ex.seconds||0),rpe:7}))})); }
+async function getPlanFor(week, day){ const override=await dbGet(STORE_PLAN,`w${week}-d${day}`); if(override&&override.plan) return inflate(override.plan); return inflate(basePlan(week,day)); }
+
+/*********************** UI ***********************/
+const weekSel=document.getElementById('week'); for(let w=1; w<=24; w++){ const opt=document.createElement('option'); opt.value=w; opt.textContent='Hafta '+w; weekSel.appendChild(opt);} weekSel.value=1; const daySel=document.getElementById('day');
+let currentLog=null;
+async function render(){ const week=parseInt(weekSel.value), day=parseInt(daySel.value); const id=`w${week}-d${day}`; let log=await dbGet(STORE_LOGS,id); if(!log){ const plan=await getPlanFor(week,day); log={id,week,day,exercises:plan,updatedAt:new Date().toISOString()}; await dbPut(STORE_LOGS,log);} currentLog=log; const cont=document.getElementById('workout'); cont.innerHTML=''; log.exercises.forEach(ex=>{ const div=document.createElement('div'); div.className='exercise'; div.innerHTML=`<h3>${ex.name}</h3><div class="target">Hedef: ${ex.targetSets} × ${(ex.type==='reps'?ex.targetReps+' tekrar':ex.targetSeconds+' sn')}</div>`; const setsDiv=document.createElement('div'); setsDiv.className='sets'; ex.sets.forEach(s=>{ const sDiv=document.createElement('div'); sDiv.className='set'; const row=document.createElement('div'); row.className='row'; const label=document.createElement('span'); label.textContent='Set '+s.index; row.appendChild(label); const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=s.done; chk.addEventListener('change',()=>{s.done=chk.checked; saveDraft();}); row.appendChild(chk); const inp=document.createElement('input'); inp.type='number'; inp.min=0; inp.value=s.actual; inp.addEventListener('change',()=>{ s.actual=parseInt(inp.value||'0'); saveDraft();}); row.appendChild(inp); const unit=document.createElement('span'); unit.textContent=ex.type==='reps'?'tekrar':'sn'; row.appendChild(unit); const rpe=document.createElement('input'); rpe.type='number'; rpe.min=1; rpe.max=10; rpe.value=s.rpe||7; rpe.title='RPE (1-10)'; rpe.addEventListener('change',()=>{ s.rpe=parseInt(rpe.value||'7'); saveDraft();}); row.appendChild(rpe); sDiv.appendChild(row); setsDiv.appendChild(sDiv); }); div.appendChild(setsDiv); cont.appendChild(div); }); document.getElementById('status').textContent=`Hafta ${week}, Gün ${day} yüklendi.`; }
+async function saveDraft(){ if(!currentLog) return; currentLog.updatedAt=new Date().toISOString(); await dbPut(STORE_LOGS,currentLog); document.getElementById('status').textContent='Taslak kaydedildi.'; }
+function stats(log){ let setsTotal=0, setsDone=0, reps=0, secs=0; log.exercises.forEach(ex=>{ ex.sets.forEach(s=>{ setsTotal++; if(s.done) setsDone++; if(ex.type==='reps') reps+=s.actual; else secs+=s.actual; }); }); return {setsTotal, setsDone, completion: setsTotal?Math.round(setsDone/setsTotal*100):0, reps, secs}; }
+
+function mergedCfgForExercise(exName){ const cfg=getCfg(); const o=(cfg.exOverrides||{})[exName]||{}; return { ...cfg, ...o, exOverrides: cfg.exOverrides };
+}
+
+function nextTargetFrom(ex){ const cfg = mergedCfgForExercise(ex.name); const finished=ex.sets.filter(s=>s.done); const doneRatio=ex.sets.length?finished.length/ex.sets.length:0; if(ex.type==='reps'){ const avg=finished.length?Math.round(finished.reduce((a,b)=>a+b.actual,0)/finished.length):0; let sets=ex.targetSets, reps=ex.targetReps||0; if(doneRatio>=(cfg.repSuccess/100) && avg>=reps){ if(reps<cfg.repMax) reps += cfg.repInc; else if(sets<cfg.setMax) sets += 1; } else if(doneRatio<(cfg.repFail/100)){ if(reps>cfg.repMin) reps -= cfg.repDec; else if(sets>cfg.setMin) sets -= 1; } return {sets:Math.max(cfg.setMin, Math.min(cfg.setMax, sets)), reps:Math.max(cfg.repMin, Math.min(cfg.repMax, reps))}; } else { const avg=finished.length?Math.round(finished.reduce((a,b)=>a+b.actual,0)/finished.length):0; let sets=ex.targetSets, seconds=ex.targetSeconds||0; if(doneRatio>=(cfg.repSuccess/100) && avg>=seconds){ seconds=Math.round(seconds*(1+cfg.timeUpPct/100)); } else if(doneRatio<(cfg.repFail/100)){ seconds=Math.max(cfg.timeMin, Math.round(seconds*(1-cfg.timeDownPct/100))); } return {sets:Math.max(cfg.setMin, Math.min(cfg.setMax, sets)), seconds}; } }
+
+async function writeNextWeek(curr){ const nextWeek=curr.week<24?curr.week+1:curr.week; const nextDay=curr.day; if(nextWeek===curr.week) return null; const computed=curr.exercises.map(ex=>{ const nxt=nextTargetFrom(ex); const o={name:ex.name,type:ex.type,sets:nxt.sets}; if(ex.type==='reps') o.reps=nxt.reps; else o.seconds=nxt.seconds; if(ex.per) o.per=ex.per; return o; }); const id=`w${nextWeek}-d${nextDay}`; await dbPut(STORE_PLAN,{id,plan:computed,basedOn:`w${curr.week}-d${curr.day}`,computedAt:new Date().toISOString()}); return id; }
+async function completeDay(){ if(!currentLog) return; const s=stats(currentLog); currentLog.completed=true; currentLog.completedAt=new Date().toISOString(); currentLog.stats=s; await dbPut(STORE_LOGS,currentLog); const nextId=await writeNextWeek(currentLog); document.getElementById('status').textContent=`Tamamlandı • %${s.completion} | Tekrar: ${s.reps} | Süre: ${s.secs}s${nextId?` • Sonraki plan (${nextId})`:''}`; const w=parseInt(weekSel.value), d=parseInt(daySel.value); if(d<4){ daySel.value=d+1; } else if(w<24){ weekSel.value=w+1; daySel.value=1; } render(); }
+async function recalcNext(){ if(!currentLog) return; const id=await writeNextWeek(currentLog); document.getElementById('status').textContent=`Sonraki hafta hesaplandı: ${id||'son hafta'}`; }
+
+/*********************** Weekly Summary ***********************/
+async function weeklySummary(week){ const logs=await dbAll(STORE_LOGS); const weekLogs=logs.filter(l=>l.week===week); let st=0, sd=0, reps=0, secs=0; const perDay=[0,0,0,0]; weekLogs.forEach(l=>{ const s=stats(l); st+=s.setsTotal; sd+=s.setsDone; reps+=s.reps; secs+=s.secs; perDay[l.day-1]=s.completion; }); return {completion: st?Math.round(sd/st*100):0, reps, secs, perDay}; }
+function drawChart(canvas, data){ const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); const W=canvas.width, H=canvas.height; const labels=['G1','G2','G3','G4']; const max=100; const barW= W/(labels.length*2); ctx.font='12px sans-serif'; for(let i=0;i<labels.length;i++){ const x= (i*2+1)*barW; const val=data[i]||0; const h= (val/max)*(H-40); ctx.fillStyle='#90caf9'; ctx.fillRect(x, H-20-h, barW, h); ctx.fillStyle='#333'; ctx.fillText(labels[i], x+barW/4, H-5); ctx.fillText(val+'%', x+barW/4-4, H-25-h); } }
+
+/*********************** PR Analytics ***********************/
+async function computePRs(){ const logs=await dbAll(STORE_LOGS); const map={}; logs.forEach(l=>{ (l.exercises||[]).forEach(ex=>{ ex.sets.forEach(s=>{ if(!s.done) return; const key=ex.name; const typ=ex.type; const val=s.actual||0; const k=key+'||'+typ; if(!map[k] || val > map[k].val){ map[k]={ ex:key, type:typ, val, date:l.completedAt||l.updatedAt, week:l.week, day:l.day }; } }); }); }); return Object.values(map).sort((a,b)=> a.ex.localeCompare(b.ex)); }
+async function openPR(){ const rows=await computePRs(); const tbody=document.querySelector('#prTable tbody'); tbody.innerHTML=''; rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.ex}</td><td>${r.type}</td><td>${r.val} ${r.type==='reps'?'tek':'sn'}</td><td>${r.date?new Date(r.date).toLocaleDateString():''}</td><td>H${r.week}/G${r.day}</td>`; tbody.appendChild(tr); }); document.getElementById('prMeta').textContent = `Toplam PR: ${rows.length}`; document.getElementById('prModal').classList.add('show'); }
+function closePR(){ document.getElementById('prModal').classList.remove('show'); }
+
+/*********************** Settings Modal Bindings ***********************/
+function openSettings(){ const c=getCfg(); ['repSuccess','repFail','repInc','repDec','repMin','repMax','setMin','setMax','timeUpPct','timeDownPct','timeMin'].forEach(id=>{ document.getElementById(id).value=c[id]; }); document.getElementById('exOverrides').value = JSON.stringify(c.exOverrides||{}, null, 2); document.getElementById('settingsModal').classList.add('show'); }
+function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
+function saveSettings(){ const o={}; ['repSuccess','repFail','repInc','repDec','repMin','repMax','setMin','setMax','timeUpPct','timeDownPct','timeMin'].forEach(id=>{ o[id]=parseInt(document.getElementById(id).value); }); try{ o.exOverrides = JSON.parse(document.getElementById('exOverrides').value||'{}'); }catch(e){ alert('Geçersiz JSON: Egzersiz geçersiz kılmaları'); return; } setCfg(o); closeSettings(); document.getElementById('status').textContent='Ayarlar kaydedildi.'; }
+function resetDefaults(){ setCfg(DEFAULTS); openSettings(); }
+
+/*********************** Export / Import ***********************/
+async function exportAll(){ const logs=await dbAll(STORE_LOGS); const plans=await dbAll(STORE_PLAN); const payload={version:5, cfg:getCfg(), exportedAt:new Date().toISOString(), logs, plans}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tracker-backup.json'; a.click(); a.remove(); }
+function importAll(file){ if(!file) return; const reader=new FileReader(); reader.onload=async e=>{ try{ const obj=JSON.parse(e.target.result); if(obj.cfg) setCfg(obj.cfg); if(obj.logs){ for(const l of obj.logs){ await dbPut(STORE_LOGS,l);} } if(obj.plans||obj.plan){ const ar=obj.plans||obj.plan; for(const p of ar){ await dbPut(STORE_PLAN,p);} } document.getElementById('status').textContent='İçe aktarıldı.'; render(); } catch(err){ alert('İçe aktarma hatası: '+err.message);} }; reader.readAsText(file,'utf-8'); }
+
+/*********************** Bindings & SW ***********************/
+const summaryBtn=document.getElementById('summaryBtn');
+summaryBtn.addEventListener('click', async ()=>{ const week=parseInt(weekSel.value); const s=await weeklySummary(week); document.getElementById('summaryMeta').textContent = `Hafta ${week} — Tamamlama: %${s.completion} | Toplam tekrar: ${s.reps} | Toplam süre: ${s.secs}s`; const canvas=document.getElementById('summaryChart'); drawChart(canvas, s.perDay); document.getElementById('summaryModal').classList.add('show'); });
+function closeSummary(){ document.getElementById('summaryModal').classList.remove('show'); }
+
+document.getElementById('closeSummary').addEventListener('click', closeSummary);
+document.getElementById('prBtn').addEventListener('click', openPR);
+document.getElementById('closePR').addEventListener('click', closePR);
+
+weekSel.addEventListener('change', render); daySel.addEventListener('change', render);
+document.getElementById('saveBtn').addEventListener('click', saveDraft);
+document.getElementById('completeBtn').addEventListener('click', completeDay);
+document.getElementById('recalcBtn').addEventListener('click', recalcNext);
+document.getElementById('exportBtn').addEventListener('click', exportAll);
+document.getElementById('importFile').addEventListener('change', e=>importAll(e.target.files[0]));
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('closeSettings').addEventListener('click', closeSettings);
+document.getElementById('saveSettings').addEventListener('click', saveSettings);
+document.getElementById('resetDefaults').addEventListener('click', resetDefaults);
+
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('service-worker.js'); }
+
+render();
+</script>
 </body>
 </html>
